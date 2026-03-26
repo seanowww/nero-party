@@ -7,4 +7,93 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-// Design your schema here
+model Party {
+  id             String        @id @default(cuid())
+  name           String
+  code           String        @unique
+  hostId         String
+  maxSongs       Int           @default(20)
+  maxVotesPerUser Int          @default(5)
+  timeLimitMin   Int?
+  status         String        @default("active") // active | ended
+  currentTrackId String?
+  isPlaying      Boolean       @default(false)
+  positionMs     Int           @default(0)
+  startedAt      BigInt        @default(0)
+  createdAt      DateTime      @default(now())
+  participants   Participant[]
+  tracks         QueueTrack[]
+}
+
+model Participant {
+  id             String    @id @default(cuid())
+  partyId        String
+  displayName    String
+  color          String
+  isHost         Boolean   @default(false)
+  spotifyToken   String?
+  spotifyRefresh String?
+  spotifyUserId  String?
+  tokenExpiresAt DateTime?
+  isPremium      Boolean   @default(false)
+  socketId       String?
+  party          Party     @relation(fields: [partyId], references: [id])
+  votes          Vote[]
+  joinedAt       DateTime  @default(now())
+
+  @@unique([partyId, displayName])
+}
+
+model QueueTrack {
+  id         String   @id @default(cuid())
+  partyId    String
+  spotifyUri String
+  title      String
+  artist     String
+  albumArt   String
+  durationMs Int
+  addedBy              String
+  addedByParticipantId String?
+  position             Int
+  played     Boolean  @default(false)
+  score      Float    @default(0)
+  party      Party          @relation(fields: [partyId], references: [id])
+  votes      Vote[]
+  reactions  TrackReaction[]
+  listenLogs ListenLog[]
+  createdAt  DateTime       @default(now())
+}
+
+model Vote {
+  id            String      @id @default(cuid())
+  value         Int
+  trackId       String
+  participantId String
+  track         QueueTrack  @relation(fields: [trackId], references: [id])
+  participant   Participant @relation(fields: [participantId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@unique([trackId, participantId])
+}
+
+model TrackReaction {
+  id            String     @id @default(cuid())
+  trackId       String
+  participantId String
+  content       String
+  type          String     // "emoji" | "text"
+  track         QueueTrack @relation(fields: [trackId], references: [id])
+  createdAt     DateTime   @default(now())
+}
+
+model ListenLog {
+  id            String     @id @default(cuid())
+  trackId       String
+  participantId String
+  listenedMs    Int
+  durationMs    Int
+  track         QueueTrack @relation(fields: [trackId], references: [id])
+  createdAt     DateTime   @default(now())
+
+  @@unique([trackId, participantId])
+}
