@@ -20,23 +20,28 @@ interface LiveReaction extends Reaction {
 
 const LIFECYCLE_MS = 5400;
 
-/** Generate a random position biased toward edges (avoids center album area) */
+/** Generate a random position biased toward edges (avoids center album area and page borders) */
 function randomEdgePosition(): { x: number; y: number } {
-  // Pick a random spot, but push away from center (35-65% zone)
-  let x = Math.random() * 100;
-  let y = Math.random() * 100;
+  // Define safe edge bands (away from both borders and center album area)
+  const leftBand = { min: 5, max: 18 };
+  const rightBand = { min: 82, max: 95 };
+  const topBand = { min: 5, max: 16 };
+  const bottomBand = { min: 82, max: 92 };
 
-  // If too close to center horizontally AND vertically, push to an edge
-  if (x > 25 && x < 75 && y > 20 && y < 70) {
-    // Randomly push to left or right edge
-    if (Math.random() > 0.5) {
-      x = Math.random() > 0.5 ? Math.random() * 20 : 80 + Math.random() * 18;
-    } else {
-      y = Math.random() > 0.5 ? Math.random() * 18 : 72 + Math.random() * 20;
-    }
+  // Pick a random edge band
+  const randInRange = (min: number, max: number) => min + Math.random() * (max - min);
+
+  if (Math.random() > 0.5) {
+    // Place on left or right edge
+    const x = Math.random() > 0.5 ? randInRange(leftBand.min, leftBand.max) : randInRange(rightBand.min, rightBand.max);
+    const y = randInRange(topBand.min, bottomBand.max);
+    return { x, y };
+  } else {
+    // Place on top or bottom edge
+    const x = randInRange(leftBand.min, rightBand.max);
+    const y = Math.random() > 0.5 ? randInRange(topBand.min, topBand.max) : randInRange(bottomBand.min, bottomBand.max);
+    return { x, y };
   }
-
-  return { x, y };
 }
 
 /** Map reaction labels to grey SVG icons */

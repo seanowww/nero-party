@@ -244,12 +244,11 @@ export async function startNextTrack(
     return;
   }
 
-  const now = Date.now();
   const state: PartyPlayback = {
     currentTrackId: nextTrack.id,
     spotifyUri: nextTrack.spotifyUri,
     isPlaying: true,
-    startedAt: now,
+    startedAt: 0,
     positionMs: 0,
     durationMs: nextTrack.durationMs,
     title: nextTrack.title,
@@ -259,13 +258,15 @@ export async function startNextTrack(
   };
   partyStates.set(partyId, state);
 
-  scheduleTrackEnd(partyId, state, io);
-  await persistPlaybackState(partyId);
-
   await prisma.party.update({
     where: { id: partyId },
     data: { currentTrackId: nextTrack.id },
   });
+
+  // Set startedAt right before broadcast so DB write latency doesn't add drift
+  state.startedAt = Date.now();
+  scheduleTrackEnd(partyId, state, io);
+  await persistPlaybackState(partyId);
 
   io.to(partyId).emit("playback:play", {
     trackId: nextTrack.id,
@@ -413,12 +414,21 @@ export async function endParty(
     },
   });
 
-  // Compute weighted scores, aggregating duplicates by spotifyUri
+  const results = await computePartyResults(partyId);
+
+  io.to(partyId).emit("party:ended", results);
+}
+
+/** Compute final rankings for a party. Reused by endParty and when clients rejoin an ended party. */
+export async function computePartyResults(partyId: string): Promise<{
+  winner: { rank: number; id: string; title: string; artist: string; albumArt: string; addedBy: string; position: number; totalScore: number; voteCount: number; reactionCount: number } | null;
+  rankings: { rank: number; id: string; title: string; artist: string; albumArt: string; addedBy: string; position: number; totalScore: number; voteCount: number; reactionCount: number }[];
+}> {
   const tracks = await prisma.queueTrack.findMany({
     where: { partyId },
     include: {
       votes: { select: { participantId: true, value: true } },
-      reactions: { select: { id: true, type: true } },
+      reactions: { select: { id: true, type: true, participantId: true } },
     },
   });
 
@@ -454,19 +464,27 @@ export async function endParty(
   const scored = Array.from(grouped.values()).map((group) => {
     const first = group[0];
 
-    // Merge votes and reactions across all instances of this song
     const allVotes = group.flatMap((t) => t.votes);
     const allReactions = group.flatMap((t) => t.reactions);
 
     const voteCount = allVotes.filter((v) => v.value === 1).length;
     const commentCount = allReactions.filter((r) => r.type === "text").length;
     const emojiCount = allReactions.filter((r) => r.type === "emoji").length;
+    const adder = first.addedByParticipantId;
+    const selfCommentCount = adder
+      ? allReactions.filter((r) => r.type === "text" && r.participantId === adder).length
+      : 0;
+    const selfEmojiCount = adder
+      ? allReactions.filter((r) => r.type === "emoji" && r.participantId === adder).length
+      : 0;
 
     const totalScore = computeScore({
       votes: allVotes,
       commentCount,
       emojiCount,
-      addedByParticipantId: first.addedByParticipantId,
+      selfCommentCount,
+      selfEmojiCount,
+      addedByParticipantId: adder,
       activeParticipantCount,
     });
 
@@ -477,13 +495,12 @@ export async function endParty(
       albumArt: first.albumArt,
       addedBy: first.addedBy,
       position: first.position,
-      totalScore,
+      totalScore: totalScore ?? 0,
       voteCount,
       reactionCount: allReactions.length,
     };
   });
 
-  // Sort by score, then tiebreak: voteCount > reactionCount > earlier position
   scored.sort((a, b) => {
     if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
     if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
@@ -492,8 +509,6 @@ export async function endParty(
     return a.position - b.position;
   });
 
-  // Minimum vote threshold: songs with < 2 votes can't take the Winner title
-  // Rankings stay sorted by score — winner is the first eligible song
   const winnerIdx = scored.findIndex(
     (t) => t.voteCount >= POINTS.MIN_VOTES_TO_WIN
   );
@@ -503,8 +518,8 @@ export async function endParty(
     ...t,
   }));
 
-  io.to(partyId).emit("party:ended", {
+  return {
     winner: winnerIdx >= 0 ? rankings[winnerIdx] : null,
     rankings,
-  });
+  };
 }

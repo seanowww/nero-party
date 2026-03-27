@@ -43,7 +43,7 @@ export default function PartyOver({ winner, rankings }: PartyOverProps) {
         }}
       />
 
-      {winner && (
+      {winner ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -93,10 +93,24 @@ export default function PartyOver({ winner, rankings }: PartyOverProps) {
               </span>
               <span className="text-warm-muted/15">·</span>
               <span className="text-warm-muted/30 text-[10px]">
-                {winner.totalScore.toLocaleString()} pts
+                {(winner.totalScore ?? 0).toLocaleString()} pts
               </span>
             </div>
           </div>
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="relative z-10 flex flex-col items-center gap-3"
+        >
+          <p className="text-amber/50 text-[10px] font-light tracking-[0.4em] uppercase">
+            Everyone wins
+          </p>
+          <p className="text-warm-muted/30 text-xs font-light">
+            No song took the crown this time
+          </p>
         </motion.div>
       )}
 
@@ -137,7 +151,7 @@ export default function PartyOver({ winner, rankings }: PartyOverProps) {
                 </p>
               </div>
               <span className="text-amber/40 text-[11px] font-medium tabular-nums">
-                {track.totalScore.toLocaleString()}
+                {(track.totalScore ?? 0).toLocaleString()}
               </span>
             </motion.div>
           ))}

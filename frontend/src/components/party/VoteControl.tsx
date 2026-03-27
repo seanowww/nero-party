@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { socket } from "../../lib/socket";
 import type { Reaction } from "./Reactions";
 
@@ -26,7 +26,11 @@ export default function VoteControl({
   const [voted, setVoted] = useState(currentVote === 1);
   const [animating, setAnimating] = useState(false);
 
-  const votesRemaining = maxVotes - votesUsed + (voted ? 1 : 0);
+  useEffect(() => {
+    setVoted(currentVote === 1);
+  }, [currentVote]);
+
+  const votesRemaining = maxVotes - votesUsed + (currentVote === 1 ? 1 : 0);
   const canVote = voted || votesRemaining > 0;
 
   const toggle = useCallback(() => {

@@ -95,9 +95,9 @@ Songs are ranked by a weighted score:
 
 | Factor      | Points                         | Notes                                    |
 |-------------|--------------------------------|------------------------------------------|
-| Votes       | 300 per vote                   | 150 if self-voted (to discourage gaming) |
+| Votes       | 300 per vote                   | 100 if self-voted (discourages gaming)   |
 | Vote boost  | multiplied by participation rate | Rewards broadly loved songs              |
-| Reactions   | 50 per reaction                | Emoji and text reactions                 |
-| Listen time | up to 200                      | Based on avg % of song listened          |
+| Comments    | 200 per comment                | 65 if on your own song                   |
+| Emoji       | 100 per reaction               | 35 if on your own song                   |
 
-A song needs at least 2 votes to be eligible for the win.
+All self-interactions (votes, comments, emoji) are discounted to ~1/3 value. A song needs at least 2 votes to be eligible for the win.

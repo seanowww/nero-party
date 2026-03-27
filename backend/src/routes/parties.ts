@@ -99,25 +99,47 @@ router.post("/:code/join", async (req, res) => {
       return;
     }
 
-    // Upsert — allow rejoining
-    const participant = await prisma.participant.upsert({
+    // Check if name already exists in this party
+    const existing = await prisma.participant.findUnique({
       where: {
         partyId_displayName: {
           partyId: party.id,
           displayName,
         },
       },
-      create: {
+    });
+
+    if (existing) {
+      // Name taken — return the existing participant info so frontend can
+      // ask "Is this you?" instead of silently merging identities
+      res.status(409).json({
+        error: "Name already taken",
+        returning: true,
+        partyId: party.id,
+        participantId: existing.id,
+        participant: {
+          id: existing.id,
+          displayName: existing.displayName,
+          color: existing.color,
+          isHost: existing.isHost,
+          isPremium: existing.isPremium,
+        },
+      });
+      return;
+    }
+
+    const participant = await prisma.participant.create({
+      data: {
         partyId: party.id,
         displayName,
         color: randomColor(),
       },
-      update: {},
     });
 
     res.json({
       partyId: party.id,
       participantId: participant.id,
+      returning: false,
       participant: {
         id: participant.id,
         displayName: participant.displayName,
@@ -129,6 +151,50 @@ router.post("/:code/join", async (req, res) => {
   } catch (err) {
     console.error("Join party error:", err);
     res.status(500).json({ error: "Failed to join party" });
+  }
+});
+
+// POST /api/parties/:code/rejoin — confirm rejoin with existing participantId
+router.post("/:code/rejoin", async (req, res) => {
+  const { code } = req.params;
+  const { participantId } = req.body;
+
+  if (!participantId) {
+    res.status(400).json({ error: "participantId required" });
+    return;
+  }
+
+  try {
+    const party = await prisma.party.findUnique({ where: { code } });
+    if (!party) {
+      res.status(404).json({ error: "Party not found" });
+      return;
+    }
+
+    const participant = await prisma.participant.findFirst({
+      where: { id: participantId, partyId: party.id },
+    });
+
+    if (!participant) {
+      res.status(404).json({ error: "Participant not found in this party" });
+      return;
+    }
+
+    res.json({
+      partyId: party.id,
+      participantId: participant.id,
+      returning: true,
+      participant: {
+        id: participant.id,
+        displayName: participant.displayName,
+        color: participant.color,
+        isHost: participant.isHost,
+        isPremium: participant.isPremium,
+      },
+    });
+  } catch (err) {
+    console.error("Rejoin party error:", err);
+    res.status(500).json({ error: "Failed to rejoin party" });
   }
 });
 

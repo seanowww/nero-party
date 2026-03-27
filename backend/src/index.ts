@@ -17,6 +17,7 @@ import {
   withPartyLock,
   checkDrift,
   schedulePartyEnd,
+  computePartyResults,
 } from "./lib/playback.js";
 import { computeScore } from "./lib/scoring.js";
 import authRoutes from "./routes/auth.js";
@@ -66,13 +67,20 @@ app.get("/api/search", async (req, res) => {
 
 // --- Scoring helpers ---
 async function getReactionCounts(
-  trackId: string
-): Promise<[commentCount: number, emojiCount: number]> {
-  const [commentCount, emojiCount] = await Promise.all([
+  trackId: string,
+  addedByParticipantId: string | null
+): Promise<[commentCount: number, emojiCount: number, selfCommentCount: number, selfEmojiCount: number]> {
+  const [commentCount, emojiCount, selfCommentCount, selfEmojiCount] = await Promise.all([
     prisma.trackReaction.count({ where: { trackId, type: "text" } }),
     prisma.trackReaction.count({ where: { trackId, type: "emoji" } }),
+    addedByParticipantId
+      ? prisma.trackReaction.count({ where: { trackId, type: "text", participantId: addedByParticipantId } })
+      : Promise.resolve(0),
+    addedByParticipantId
+      ? prisma.trackReaction.count({ where: { trackId, type: "emoji", participantId: addedByParticipantId } })
+      : Promise.resolve(0),
   ]);
-  return [commentCount, emojiCount];
+  return [commentCount, emojiCount, selfCommentCount, selfEmojiCount];
 }
 
 async function getActiveParticipantCount(partyId: string): Promise<number> {
@@ -148,6 +156,12 @@ io.on("connection", (socket) => {
         // Strip BigInt fields from party before sending (JSON can't serialize BigInt)
         const { startedAt: _sa, isPlaying: _ip, positionMs: _pm, ...partyData } = party;
         socket.emit("party:state", { ...partyData, playback });
+
+        // If the party has ended, send results so late-joiners see the results screen
+        if (party.status === "ended") {
+          const results = await computePartyResults(partyId);
+          socket.emit("party:ended", results);
+        }
 
         // Schedule time-limit auto-end (deduplicates if already scheduled)
         if (party.status === "active") {
@@ -439,8 +453,9 @@ io.on("connection", (socket) => {
             where: { id: dup.id },
             select: { addedByParticipantId: true },
           });
+          const addedBy = track?.addedByParticipantId ?? null;
           const votes = await prisma.vote.findMany({ where: { trackId: dup.id } });
-          const [commentCount, emojiCount] = await getReactionCounts(dup.id);
+          const [commentCount, emojiCount, selfCommentCount, selfEmojiCount] = await getReactionCounts(dup.id, addedBy);
 
           const score = computeScore({
             votes: votes.map((v) => ({
@@ -449,7 +464,9 @@ io.on("connection", (socket) => {
             })),
             commentCount,
             emojiCount,
-            addedByParticipantId: track?.addedByParticipantId ?? null,
+            selfCommentCount,
+            selfEmojiCount,
+            addedByParticipantId: addedBy,
             activeParticipantCount,
           });
 
@@ -509,8 +526,9 @@ io.on("connection", (socket) => {
             where: { id: trackId },
             select: { addedByParticipantId: true },
           });
+          const addedBy = track?.addedByParticipantId ?? null;
           const votes = await prisma.vote.findMany({ where: { trackId } });
-          const [commentCount, emojiCount] = await getReactionCounts(trackId);
+          const [commentCount, emojiCount, selfCommentCount, selfEmojiCount] = await getReactionCounts(trackId, addedBy);
           const activeParticipantCount = await getActiveParticipantCount(data.partyId);
 
           const score = computeScore({
@@ -520,7 +538,9 @@ io.on("connection", (socket) => {
             })),
             commentCount,
             emojiCount,
-            addedByParticipantId: track?.addedByParticipantId ?? null,
+            selfCommentCount,
+            selfEmojiCount,
+            addedByParticipantId: addedBy,
             activeParticipantCount,
           });
 

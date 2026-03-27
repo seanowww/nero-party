@@ -5,7 +5,9 @@ export const POINTS = {
   VOTE: 300,
   SELF_VOTE: 100,
   COMMENT: 200,
+  SELF_COMMENT: 65,
   EMOJI: 100,
+  SELF_EMOJI: 35,
   MIN_VOTES_TO_WIN: 2,
 } as const;
 
@@ -13,6 +15,8 @@ export interface ScoreInput {
   votes: { participantId: string; value: number }[];
   commentCount: number;
   emojiCount: number;
+  selfCommentCount: number;
+  selfEmojiCount: number;
   addedByParticipantId: string | null;
   activeParticipantCount: number;
 }
@@ -22,6 +26,8 @@ export function computeScore(input: ScoreInput): number {
     votes,
     commentCount,
     emojiCount,
+    selfCommentCount,
+    selfEmojiCount,
     addedByParticipantId,
     activeParticipantCount,
   } = input;
@@ -44,10 +50,14 @@ export function computeScore(input: ScoreInput): number {
     voteScore = voteScore * (1 + voteRate);
   }
 
-  // Comments (text reactions): 200 pts each
-  // Emoji reactions: 100 pts each
+  // Reactions: self-reactions are discounted to ~1/3 value
+  const otherComments = commentCount - selfCommentCount;
+  const otherEmojis = emojiCount - selfEmojiCount;
   const reactionScore =
-    commentCount * POINTS.COMMENT + emojiCount * POINTS.EMOJI;
+    otherComments * POINTS.COMMENT +
+    selfCommentCount * POINTS.SELF_COMMENT +
+    otherEmojis * POINTS.EMOJI +
+    selfEmojiCount * POINTS.SELF_EMOJI;
 
   return Math.round(voteScore + reactionScore);
 }

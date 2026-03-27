@@ -58,12 +58,10 @@ export async function createParty(data: {
   return res.json();
 }
 
-export async function joinParty(
-  code: string,
-  displayName: string
-): Promise<{
+export interface JoinResult {
   partyId: string;
   participantId: string;
+  returning: boolean;
   participant: {
     id: string;
     displayName: string;
@@ -71,15 +69,43 @@ export async function joinParty(
     isHost: boolean;
     isPremium: boolean;
   };
-}> {
+}
+
+export async function joinParty(
+  code: string,
+  displayName: string
+): Promise<JoinResult> {
   const res = await fetch(`${API_URL}/api/parties/${code}/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ displayName }),
   });
+
+  // 409 = name taken, but includes returning participant data
+  if (res.status === 409) {
+    const data = await res.json();
+    return { ...data, returning: true };
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || "Failed to join party");
+  }
+  return res.json();
+}
+
+export async function rejoinParty(
+  code: string,
+  participantId: string
+): Promise<JoinResult> {
+  const res = await fetch(`${API_URL}/api/parties/${code}/rejoin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participantId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to rejoin party");
   }
   return res.json();
 }

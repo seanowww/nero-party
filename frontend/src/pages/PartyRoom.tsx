@@ -10,7 +10,6 @@ import type { Reaction } from "../components/party/Reactions";
 import ReactionInput from "../components/party/ReactionInput";
 import QueueDrawer from "../components/party/QueueDrawer";
 import SearchModal from "../components/party/SearchModal";
-import SpotifyConnect from "../components/party/SpotifyConnect";
 import VoteControl from "../components/party/VoteControl";
 import PartyOver from "../components/party/PartyOver";
 import TimeWarning from "../components/party/TimeWarning";
@@ -146,12 +145,10 @@ export default function PartyRoom() {
   // Spotify player
   const {
     isReady: spotifyReady,
-    isPremium,
     deviceLost,
     playerState,
     playTrack,
     pause: spotifyPause,
-    resume: spotifyResume,
     seek: spotifySeek,
     reclaim,
   } = useSpotifyPlayer(participantId);
@@ -165,8 +162,6 @@ export default function PartyRoom() {
   playTrackRef.current = playTrack;
   const spotifyPauseRef = useRef(spotifyPause);
   spotifyPauseRef.current = spotifyPause;
-  const spotifyResumeRef = useRef(spotifyResume);
-  spotifyResumeRef.current = spotifyResume;
   const spotifySeekRef = useRef(spotifySeek);
   spotifySeekRef.current = spotifySeek;
   const playerStateRef = useRef(playerState);
@@ -299,8 +294,8 @@ export default function PartyRoom() {
       const adjustedPos = data.positionMs + Math.max(0, Date.now() - data.startedAt);
       setIsPlaying(true);
       setCurrentTime(Math.floor(adjustedPos / 1000));
-      spotifySeekRef.current(adjustedPos);
-      spotifyResumeRef.current();
+      // Start playback from authoritative server position; don't rely on prior local loaded state
+      playTrackRef.current(data.spotifyUri, adjustedPos);
     });
 
     socket.on("playback:seek", (data: { positionMs: number; spotifyUri: string }) => {
@@ -380,9 +375,10 @@ export default function PartyRoom() {
     if (!currentPlayback || !spotifyReady) return;
     if (lastStartedTrackRef.current === currentPlayback.trackId) return;
     lastStartedTrackRef.current = currentPlayback.trackId;
-    const pos = currentPlayback.isPlaying !== false
-      ? currentPlayback.positionMs + (Date.now() - currentPlayback.startedAt)
-      : currentPlayback.positionMs;
+    // Do not auto-start audio for late joiners when party is currently paused.
+    // Playback will begin on the next server "playback:resume" event.
+    if (currentPlayback.isPlaying === false) return;
+    const pos = currentPlayback.positionMs + (Date.now() - currentPlayback.startedAt);
     playTrack(currentPlayback.spotifyUri, Math.max(0, pos));
   }, [currentPlayback?.trackId, spotifyReady]);
 
@@ -643,7 +639,7 @@ export default function PartyRoom() {
         className="absolute inset-0 pointer-events-none overflow-hidden"
         style={{
           zIndex: -1,
-          opacity: 0.08,
+          opacity: 0.18,
           filter: "blur(0.4px)",
           maskImage: "radial-gradient(ellipse 85% 80% at 50% 45%, transparent 0%, transparent 75%, rgba(0,0,0,0.3) 90%, black 100%)",
           WebkitMaskImage: "radial-gradient(ellipse 85% 80% at 50% 45%, transparent 0%, transparent 75%, rgba(0,0,0,0.3) 90%, black 100%)",

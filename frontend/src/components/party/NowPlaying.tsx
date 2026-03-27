@@ -155,15 +155,10 @@ export default function NowPlaying({
                   alt={track.title}
                   className="w-full h-full object-cover"
                 />
-                {isCenter && (
-                  <>
-                    <div className="absolute inset-0 vinyl-overlay" />
-                    {titleAction && (
-                      <div className="absolute bottom-3 right-3 z-10">
-                        {titleAction}
-                      </div>
-                    )}
-                  </>
+                {isCenter && titleAction && (
+                  <div className="absolute bottom-3 right-3 z-10">
+                    {titleAction}
+                  </div>
                 )}
                 {isAdjacent && (
                   <>
